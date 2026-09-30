@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#173b32">
+<title>Generador de grupos rotativos</title>
+<style>
+:root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1d2925;background:#f4f7f5;font-synthesis:none}
+*{box-sizing:border-box}body{margin:0}button,input,textarea,select{font:inherit}
+header{background:#173b32;color:white;padding:30px 20px}header .inner,main{max-width:1050px;margin:auto}
+h1{font-size:clamp(1.5rem,4vw,2.2rem);margin:0 0 7px}header p{margin:0;color:#d3e4dc}
+main{padding:24px 18px 50px}.panel{background:white;border:1px solid #dce5df;border-radius:14px;padding:20px;margin-bottom:18px;box-shadow:0 2px 10px #173b3208}
+h2{font-size:1.12rem;margin:0 0 15px}.hint{font-size:.88rem;color:#63716b;line-height:1.5;margin:8px 0 0}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}.field{display:flex;flex-direction:column;gap:6px}.field label{font-weight:650;font-size:.9rem}
+input,textarea,select{border:1px solid #cbd6cf;border-radius:8px;padding:10px;background:#fff;color:#1d2925;width:100%}input:focus,textarea:focus,select:focus{outline:2px solid #75ad91;outline-offset:1px}
+textarea{min-height:88px;resize:vertical}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+button{border:0;border-radius:9px;padding:10px 15px;font-weight:650;cursor:pointer}
+.primary{background:#176b4c;color:white}.secondary{background:#eaf1ed;color:#214c3b}.danger{background:#fff0ee;color:#a83227}
+button:focus-visible{outline:3px solid #84b9a0;outline-offset:2px}
+.rounds{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:15px}.round-btn{background:#edf1ee;color:#33433b}.round-btn.active{background:#176b4c;color:white}
+.groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.group{border:1px solid #d7e3dc;border-radius:11px;padding:14px;background:#fbfdfb}.group h3{margin:0 0 9px;font-size:1rem;color:#176b4c}.leader{font-size:.84rem;color:#56645d;margin-bottom:8px}.members{display:flex;flex-wrap:wrap;gap:6px}.person{background:#e9f1ec;border-radius:6px;padding:4px 7px;font-size:.85rem}
+.status{border-radius:9px;padding:12px;background:#eaf5ee;color:#215b3d;font-size:.9rem;line-height:1.5}.status.error{background:#fff0ee;color:#a83227}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}.metric{background:#f5f8f6;border-radius:9px;padding:12px}.metric strong{display:block;font-size:1.25rem;color:#176b4c}.metric span{font-size:.8rem;color:#64716a}
+.hidden{display:none}.muted{color:#63716b;font-size:.88rem}
+.table-wrap{overflow-x:auto}
+@media(max-width:520px){.panel{padding:15px}header{padding:24px 18px}}
+</style>
+</head>
+<body>
+<header><div class="inner"><h1>Generador de grupos rotativos</h1><p>Organiza equipos con líderes fijos y comprueba las reglas de rotación.</p></div></header>
+<main>
+<section class="panel">
+<h2>Configuración</h2>
+<div class="fields">
+<div class="field"><label for="people">Personas (una por línea o separadas por comas)</label><textarea id="people" spellcheck="false">A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z</textarea></div>
+<div class="field"><label for="leaders">Líderes (uno por grupo, en orden)</label><textarea id="leaders" spellcheck="false">A, B, C, D, E</textarea></div>
+<div class="field"><label for="groupNames">Nombres de grupos (opcional)</label><textarea id="groupNames" spellcheck="false">Grupo 1, Grupo 2, Grupo 3, Grupo 4, Grupo 5</textarea></div>
+<div class="field"><label for="mode">Modo de generación</label><select id="mode"><option value="random">Generar desde cero</option><option value="continue">Continuar desde la primera conformación</option></select></div>
+<div class="field hidden" id="initialField"><label for="initial">Primera conformación (un grupo por línea)</label><textarea id="initial" spellcheck="false" placeholder="F, I, P, U, V&#10;J, L, N, S&#10;Q, R, T, Z&#10;G, K, O, Y&#10;H, M, W, X"></textarea><p class="hint">Introduce los integrantes de cada grupo, en el orden de los nombres configurados. No incluyas a los líderes.</p></div>
+<div class="field"><label for="roundCount">Conformaciones</label><input id="roundCount" type="number" min="1" max="100" value="5"></div>
+<div class="field"><label for="seed">Semilla aleatoria</label><input id="seed" type="number" step="1" value="1234"></div>
+</div>
+<p class="hint">Los líderes también aparecen en la lista de personas, pero no rotan. Cada grupo debe tener un líder distinto. Para mantener las garantías matemáticas del algoritmo, el número de grupos debe ser primo.</p>
+<div class="actions"><button class="primary" id="generate">Generar conformaciones</button><button class="secondary" id="reset">Restablecer ejemplo</button></div>
+<div id="error" class="status error hidden" role="alert" style="margin-top:14px"></div>
+</section>
+<section class="panel hidden" id="results"><h2>Conformaciones</h2><div class="rounds" id="roundTabs" role="tablist" aria-label="Conformaciones"></div><div id="groups" class="groups"></div></section>
+<section class="panel hidden" id="verification"><h2>Verificación</h2><div id="verificationStatus" class="status"></div><div class="summary" id="metrics" style="margin-top:12px"></div></section>
+<section class="panel hidden" id="history"><h2>Historial de compañeros</h2><p class="hint">Personas con las que cada integrante ha compartido grupo en las conformaciones generadas.</p><div id="historyContent" class="table-wrap"></div></section>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const defaults={people:"A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z",leaders:"A, B, C, D, E",groupNames:"Grupo 1, Grupo 2, Grupo 3, Grupo 4, Grupo 5",roundCount:"5",seed:"1234"};
+let current=[],activeRound=0;
+function parseList(value){return value.split(/[\n,;]+/).map(x=>x.trim()).filter(Boolean)}
+function isPrime(n){if(n<2)return false;for(let d=2;d*d<=n;d++)if(n%d===0)return false;return true}
+function gcd(a,b){while(b){[a,b]=[b,a%b]}return a}
+function seededRandom(seed){let state=seed>>>0;return()=>{state=(state+0x6D2B79F5)>>>0;let t=state;t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296}}
+function shuffle(array,rng){for(let i=array.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[array[i],array[j]]=[array[j],array[i]]}return array}
+function validateInput(){
+ const people=parseList($("people").value),leaders=parseList($("leaders").value),names=parseList($("groupNames").value);
+ if(!people.length)throw Error("Introduce al menos una persona.");
+ if(new Set(people).size!==people.length)throw Error("Hay nombres de personas repetidos.");
+ if(!leaders.length)throw Error("Introduce al menos un líder.");
+ if(new Set(leaders).size!==leaders.length)throw Error("Hay líderes repetidos.");
+ if(leaders.some(x=>!people.includes(x)))throw Error("Todos los líderes deben estar incluidos en la lista de personas.");
+ if(names.length!==leaders.length)throw Error("Debe haber exactamente un nombre de grupo por cada líder.");
+ if(new Set(names).size!==names.length)throw Error("Hay nombres de grupos repetidos.");
+ const g=leaders.length,members=people.filter(p=>!leaders.includes(p));
+ if(!isPrime(g))throw Error("El esquema requiere un número primo de grupos (2, 3, 5, 7, 11...).");
+ if(members.length>g*g)throw Error(`Hay ${members.length} integrantes para ${g} grupos. El máximo de este esquema es ${g*g}.`);
+ const rounds=Number($("roundCount").value);
+ if(!Number.isInteger(rounds)||rounds<1||rounds>100)throw Error("El número de conformaciones debe ser un entero entre 1 y 100.");
+ const seed=Number($("seed").value);
+ if(!Number.isSafeInteger(seed))throw Error("La semilla debe ser un número entero válido.");
+ return {people,leaders,names,members,g,rounds,seed};
+}
+function distribute(members,g,seed){
+ const rng=seededRandom(seed),order=shuffle([...members],rng),assignment=new Map();
+ const steps=[...Array(g-1)].map((_,i)=>i+1).filter(p=>gcd(p,g)===1).slice(0,Math.floor(members.length/g));
+ for(const step of steps)for(let base=0;base<g;base++)assignment.set(order.pop(),{base,step});
+ order.forEach((person,index)=>assignment.set(person,{base:index,step:0}));
+ return assignment;
+}
+function makeRounds(cfg){
+ const assignment=distribute(cfg.members,cfg.g,cfg.seed),rounds=[];
+ for(let r=0;r<Math.min(cfg.rounds,cfg.g);r++){
+  rounds.push(cfg.names.map((name,i)=>({name,leader:cfg.leaders[i],members:cfg.members.filter(p=>{const a=assignment.get(p);return(a.base+a.step*r)%cfg.g===i}).sort((a,b)=>a.localeCompare(b,"es"))})));
+ }
+ return rounds;
+}
+function normalizeInitial(cfg){
+ const lines=$("initial").value.split(/\n/).map(x=>x.trim()).filter(Boolean);
+ if(lines.length!==cfg.g)throw Error(`Debes introducir exactamente ${cfg.g} líneas, una por grupo.`);
+ const groups=lines.map(line=>line.split(/[,;]+/).map(x=>x.trim()).filter(Boolean));
+ const seen=new Set();
+ groups.forEach((members,i)=>{
+  if(members.length>cfg.g)throw Error(`${cfg.names[i]} tiene ${members.length} integrantes. El máximo es ${cfg.g}.`);
+  if(new Set(members).size!==members.length)throw Error(`Hay integrantes repetidos en ${cfg.names[i]}.`);
+  members.forEach(p=>{
+   if(!cfg.members.includes(p))throw Error(`'${p}' no es un integrante válido. Comprueba que no sea un líder.`);
+   if(seen.has(p))throw Error(`El integrante '${p}' aparece en más de un grupo.`);
+   seen.add(p);
+  });
+ });
+ const missing=cfg.members.filter(p=>!seen.has(p));
+ if(missing.length)throw Error(`Faltan integrantes en la primera conformación: ${missing.join(", ")}.`);
+ return cfg.names.map((name,i)=>({name,leader:cfg.leaders[i],members:[...groups[i]].sort((a,b)=>a.localeCompare(b,"es"))}));
+}
+function continuationScore(assignment,cfg,forbidden){
+ const g=cfg.g;let repeated=0,worst=0,imbalance=0;
+ for(let r=1;r<g;r++){
+  const groups=Array.from({length:g},()=>[]);
+  for(const [person,a] of assignment)groups[(a.base+a.step*r)%g].push(person);
+  const sizes=groups.map(x=>x.length),difference=Math.max(...sizes)-Math.min(...sizes);
+  worst=Math.max(worst,difference);imbalance+=difference;
+  for(const group of groups)for(let i=0;i<group.length;i++)for(let j=i+1;j<group.length;j++){
+   const key=[group[i],group[j]].sort((a,b)=>a.localeCompare(b,"es")).join("\u0000");
+   if(forbidden.has(key))repeated++;
+  }
+ }
+ const fixed=[...assignment.values()].filter(a=>a.step===0).length;
+ return [repeated,worst,imbalance,fixed];
+}
+function compareScores(a,b){for(let i=0;i<a.length;i++)if(a[i]!==b[i])return a[i]-b[i];return 0}
+function continueFromFirst(cfg,first,attempts=500){
+ const g=cfg.g,rng=seededRandom(cfg.seed),forbidden=new Set();
+ first.forEach(group=>{for(let i=0;i<group.members.length;i++)for(let j=i+1;j<group.members.length;j++){
+  forbidden.add([group.members[i],group.members[j]].sort((a,b)=>a.localeCompare(b,"es")).join("\u0000"));
+ }});
+ let best=null,bestScore=null;
+ for(let attempt=0;attempt<attempts;attempt++){
+  const assignment=new Map();
+  first.forEach((group,base)=>{
+   const steps=shuffle(Array.from({length:g},(_,i)=>i),rng).slice(0,group.members.length);
+   group.members.forEach((person,i)=>assignment.set(person,{base,step:steps[i]}));
+  });
+  const score=continuationScore(assignment,cfg,forbidden);
+  if(!bestScore||compareScores(score,bestScore)<0){
+   best=assignment;bestScore=score;
+   if(score[0]===0&&score[1]<=1)break;
+  }
+ }
+ const rounds=[first];
+ for(let r=1;r<Math.min(cfg.rounds,g);r++){
+  rounds.push(cfg.names.map((name,i)=>({name,leader:cfg.leaders[i],members:cfg.members.filter(person=>{
+   const a=best.get(person);return(a.base+a.step*r)%g===i;
+  }).sort((a,b)=>a.localeCompare(b,"es"))})));
+ }
+ return {rounds,score:bestScore};
+}
+function verify(cfg,rounds){
+ const pairs=new Map(),visits=new Map(cfg.members.map(p=>[p,new Set()]));let valid=true;const issues=[];
+ rounds.forEach((round,r)=>{
+  const all=[];
+  round.forEach((group,i)=>{
+   if(group.leader!==cfg.leaders[i]){valid=false;issues.push(`El líder de ${group.name} cambió en la conformación ${r+1}.`)}
+   group.members.forEach(p=>{all.push(p);visits.get(p).add(group.name)});
+   for(let i=0;i<group.members.length;i++)for(let j=i+1;j<group.members.length;j++){
+    const key=[group.members[i],group.members[j]].sort((a,b)=>a.localeCompare(b,"es")).join("\u0000");
+    pairs.set(key,(pairs.get(key)||0)+1);
+   }
+  });
+  if(all.length!==cfg.members.length||new Set(all).size!==cfg.members.length||cfg.members.some(p=>!all.includes(p))){valid=false;issues.push(`En la conformación ${r+1} faltan o se repiten integrantes.`)}
+ });
+ const repeated=[...pairs].filter(([,n])=>n>1);
+ if(repeated.length){valid=false;issues.push(`${repeated.length} parejas se repiten.`)}
+ const visitCounts=[...visits.values()].map(s=>s.size);
+ const maxVisits=Math.min(rounds.length,cfg.g);
+ const fullyRotated=visitCounts.every(n=>n===maxVisits||n===1);
+ if(!fullyRotated){valid=false;issues.push("Hay integrantes cuya rotación no sigue el esquema previsto.");}
+ return{valid,issues,pairs,visits,repeated};
+}
+function el(tag,cls,text){const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node}
+function render(cfg,rounds,result){
+ current=rounds;activeRound=0;
+ $("results").classList.remove("hidden");$("verification").classList.remove("hidden");$("history").classList.remove("hidden");
+ const tabs=$("roundTabs");tabs.replaceChildren();
+ rounds.forEach((_,i)=>{const b=el("button","round-btn"+(i===0?" active":""),`Conformación ${i+1}`);b.type="button";b.setAttribute("role","tab");b.setAttribute("aria-selected",String(i===0));b.addEventListener("click",()=>showRound(i));tabs.append(b)});
+ showRound(0);
+ const status=$("verificationStatus");status.className="status"+(result.valid?"":" error");
+ status.textContent=result.valid?"Todas las comprobaciones se han superado: líderes fijos, reparto completo y ninguna pareja repetida.":result.issues.join(" ");
+ const metrics=$("metrics");metrics.replaceChildren();
+ const totalPairs=cfg.members.length*(cfg.members.length-1)/2;
+ const sizes=rounds[0].map(g=>g.members.length).sort((a,b)=>a-b);
+ [[rounds.length,"Conformaciones generadas"],[sizes.join(" / "),"Integrantes por grupo (primera)"],[result.pairs.size+" / "+totalPairs,"Parejas que han coincidido"],[result.repeated.length,"Parejas repetidas"]].forEach(([v,l])=>{const m=el("div","metric");m.append(el("strong","",v),el("span","",l));metrics.append(m)});
+ const history=$("historyContent");history.replaceChildren();const table=el("table");table.style.cssText="width:100%;border-collapse:collapse;text-align:left;font-size:.88rem";
+ const head=el("tr");["Integrante","Compañeros por conformación"].forEach(t=>{const th=el("th","",t);th.style.cssText="padding:9px;border-bottom:1px solid #dce5df";head.append(th)});const thead=el("thead");thead.append(head);table.append(thead);
+ const tbody=el("tbody");cfg.members.forEach(p=>{const tr=el("tr"),td1=el("td","",p),td2=el("td","",rounds.map(r=>{const g=r.find(g=>g.members.includes(p));return g?`${g.name}: ${g.members.filter(q=>q!==p).join(", ")}`:""}).join(" · "));[td1,td2].forEach(td=>td.style.cssText="padding:9px;border-bottom:1px solid #edf1ee;vertical-align:top");tr.append(td1,td2);tbody.append(tr)});table.append(tbody);history.append(table);
+}
+function showRound(index){
+ activeRound=index;
+ document.querySelectorAll(".round-btn").forEach((b,i)=>{b.classList.toggle("active",i===index);b.setAttribute("aria-selected",String(i===index))});
+ const container=$("groups");container.replaceChildren();
+ current[index].forEach(group=>{const card=el("article","group");card.append(el("h3","",group.name),el("div","leader",`Líder fijo: ${group.leader} · ${group.members.length} integrantes`));const members=el("div","members");group.members.forEach(p=>members.append(el("span","person",p)));card.append(members);container.append(card)});
+}
+function generate(){
+ const error=$("error");error.classList.add("hidden");
+ try{
+  const cfg=validateInput();let rounds,extraMessage="";
+  if($("mode").value==="continue"){
+   const first=normalizeInitial(cfg),continued=continueFromFirst(cfg,first);
+   rounds=continued.rounds;
+   if(continued.score[0]>0)extraMessage=`La búsqueda encontró ${continued.score[0]} parejas repetidas respecto a la primera conformación. Prueba con otra semilla.`;
+   else if(continued.score[1]>1)extraMessage="No se encontró una distribución completamente equilibrada. La primera conformación se ha conservado.";
+  }else rounds=makeRounds(cfg);
+  const result=verify(cfg,rounds);render(cfg,rounds,result);
+  if(extraMessage)$("verification").append(el("p","hint",extraMessage));
+  if(cfg.rounds>cfg.g)$("results").append(el("p","hint",`Se solicitaron ${cfg.rounds} conformaciones, pero el esquema permite como máximo ${cfg.g}. Se han generado ${cfg.g}.`));
+ }catch(e){error.textContent=e.message;error.classList.remove("hidden");$("results").classList.add("hidden");$("verification").classList.add("hidden");$("history").classList.add("hidden")}
+}
+$("mode").addEventListener("change",()=>{$("initialField").classList.toggle("hidden",$("mode").value!=="continue")});
+$("generate").addEventListener("click",generate);
+$("reset").addEventListener("click",()=>{Object.entries(defaults).forEach(([id,value])=>$(id).value=value);$("mode").value="random";$("initial").value="";$("initialField").classList.add("hidden");generate()});
+generate();
+</script>
+</body>
+</html>
